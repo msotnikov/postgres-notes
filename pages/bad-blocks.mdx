@@ -33,7 +33,7 @@ SQL Error [XX000]: ERROR: MultiXactId 808464432 has not been created yet -- appa
   Where: while scanning block 35940675 offset 12 of relation "public.bad_table"
 ```
 
-5. Метод перебора построчко
+2. Метод перебора построчко
 ```
 postgres=# \set FETCH_COUNT 1
 postgres=# \pset pager off
@@ -79,7 +79,7 @@ END $$ language plpgsql;
 
 ### Восстановление таблицы удалением испрорченных данных
 
-0. Спасаем данные из блока построчно
+0. Спасаем данные из блока построчно (какие-то из них могут не выполниться)
 
 ```sql
 select ctid,* from public.products where ctid = '(35940675,1)'; -- +
@@ -115,32 +115,7 @@ pg_filedump -i ./base/16401/16601.296 | grep "XMAX: 97"  /* XMIN: 0 XMAX: 97 CID
 4. Рассчитываем номер блока в файле:
 ```(0.0233002 * 1024^3) / 8192 = 3054.0038144   /* Блок 3054 */```
 
-5. Останавливаем сервер PostgreSQL
-
-6. бэкапим файлик `/base/16401/16601.296`
-
-7. “Зануляем” весь блок:
-```shell
-# dd if=/dev/zero of=/PGDATA/base/db_oid/bad_table_filenodeid bs=8k seek=XXXXX count=1 conv=notrunc
-dd if=/dev/zero of=$PG_DATA/base/16401/16601.296 bs=8192 seek=3054 count=1 conv=notrunc
-```
-
-8. Проверяем с помощью pg_filedump:
-```shell
-pg_filedump -i ./base/16401/16601.296 | grep "XMAX: 97"
-```
-
-9. Проверяем, с помощью pageinspect:
-```
-postgres=# select t_xmin, t_xmax, t_ctid from heap_page_items(get_raw_page('files',38800366)) WHERE t_xmax = 97;
-/*
-t_xmin | t_xmax | t_ctid
----------+---------+--------
-(0 rows)
-*/
-```
-
-10. Генератор команды dd для копирования блоков. Можно искользовать для автоматизации пунктов 1-4 выше.
+5. Для автоматизации пунктов 1-4 (те что выше) можно использовать генератор команды dd.
 Обратить внимание что seek (нужен для зануления) != skip (нужен для чтения блоков), см доку на dd
 
 ```sql
@@ -170,3 +145,27 @@ from calc, params, what
  */
 ```
 
+6. Останавливаем сервер PostgreSQL
+
+7. бэкапим файлик `/base/16401/16601.296`
+
+8. “Зануляем” весь блок:
+```shell
+# dd if=/dev/zero of=/PGDATA/base/db_oid/bad_table_filenodeid bs=8k seek=XXXXX count=1 conv=notrunc
+dd if=/dev/zero of=$PG_DATA/base/16401/16601.296 bs=8192 seek=3054 count=1 conv=notrunc
+```
+
+9. Проверяем с помощью pg_filedump:
+```shell
+pg_filedump -i ./base/16401/16601.296 | grep "XMAX: 97"
+```
+
+10. Проверяем, с помощью pageinspect:
+```
+postgres=# select t_xmin, t_xmax, t_ctid from heap_page_items(get_raw_page('files',38800366)) WHERE t_xmax = 97;
+/*
+t_xmin | t_xmax | t_ctid
+---------+---------+--------
+(0 rows)
+*/
+```
