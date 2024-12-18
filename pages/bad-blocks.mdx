@@ -1,0 +1,172 @@
+###
+
+### Введение
+При написании использованы
+- Восстановление повреждённых данных — Евгений Бредня, [PGConf.Russia 2023]((https://pgconf.ru/talk/1589424)) [Евгений Бредня, PGConf.Russia 2023.PDF](/PGConf-2023_Data-Recovery_EBrednya.pdf) и https://www.youtube.com/watch?v=oJfT6rMM37A
+- "Autovacuum. Вредные советы." Вадим Яценко (Лаборатории Тантор) [PGConf.Russia 2022](https://pgconf.ru/talk/1589312) [Яценко.pdf](/Яценко_Tantor.pdf)
+- https://postgreshelp.com/postgresql-checksum/
+- [Статья](https://habr.com/ru/articles/853048/) mafet на habr
+
+### Физически испорченные данные (блоки)
+
+При отключенных checksum испорченные блоки могут приводить к разным последствиям - ошибки при чтении/записи, и даже SEGFAULT при обращении к данным.
+В случае с включенными checksum поведение более предсказумое (см. [ignore_checksum_failure](https://www.postgresql.org/docs/current/runtime-config-developer.html#GUC-IGNORE-CHECKSUM-FAILURE) и [`checksum`](https://www.postgresql.org/docs/current/checksums.html)
+
+Есть несколько способов проверять целостность данных на диске.
+
+1. Для того чтобы находить в рантайме нужно включать проверку [`checksum`](https://www.postgresql.org/docs/current/checksums.html)
+Для этого потребуется выполнить pg_checksums на выключенной базе.
+
+2. Таблицу или БД можно проверить `pg_dump`. Можно даже выполнять периодически и отправлять в /dev/null
+
+3. Быстрая проверка, выгрузит данные(!), может работать в несколько потоков
+
+```sql
+select ctid, * from bad_table where ctid>’(100,0)’ and ctid<’(200,0)’;
+```
+
+### Как найти битый блок
+
+1. Искать в логах. Например при ```sql vacuum freeze bad_table; ```
+```logcatfilter
+SQL Error [XX000]: ERROR: MultiXactId 808464432 has not been created yet -- apparent wraparound
+  Where: while scanning block 35940675 offset 12 of relation "public.bad_table"
+```
+
+5. Метод перебора построчко
+```
+postgres=# \set FETCH_COUNT 1
+postgres=# \pset pager off
+Pager usage is off.
+postgres=# SELECT ctid, id FROM table;
+```
+
+3. Метод молотилка
+```sql
+select molotilka(’bad_table’, 0);
+```
+
+Прочитает все строки в каждом блоке из таблицы, покажет нечитаемые блоки и строки.
+
+```sql
+CREATE or REPLACE FUNCTION molotilka(tbl regclass, start_page bigint) RETURNS bigint AS $$
+DECLARE
+n_pages integer; page integer;
+lps_in_page integer; lp_p integer;
+err_count bigint = 0;
+BEGIN
+SELECT pg_relation_size(tbl) / 8192 INTO n_pages;
+FOR page IN start_page .. n_pages-1 LOOP
+BEGIN
+SELECT coalesce(max(lp),0) from heap_page_items(get_raw_page(tbl::text, page)) INTO lps_in_page;
+FOR lp_p IN 1 .. lps_in_page LOOP
+BEGIN
+EXECUTE format('select row(t.*) from %s as t where ctid=''(%s,%s)''', tbl::text, page, lp_p);
+EXCEPTION WHEN OTHERS THEN
+err_count = err_count + 1;
+RAISE NOTICE 'TUPLE ERROR: ctid=(%,%), SQLSTATE=% DETAIL=%', page, lp_p, SQLSTATE, SQLERRM;
+END;
+END LOOP;
+EXCEPTION WHEN OTHERS THEN
+err_count = err_count + 1;
+RAISE NOTICE 'PAGE ERROR: page=%, SQLSTATE=%, DETAIL=%', page, SQLSTATE, SQLERRM;
+END;
+END LOOP;
+RETURN err_count;
+END $$ language plpgsql;
+```
+
+
+### Восстановление таблицы удалением испрорченных данных
+
+0. Спасаем данные из блока построчно
+
+```sql
+select ctid,* from public.products where ctid = '(35940675,1)'; -- +
+select ctid,* from public.products where ctid = '(35940675,6)'; -- empty
+select ctid,* from public.products where ctid = '(35940675,9)'; -- empty
+select ctid,* from public.products where ctid = '(35940675,12)'; -- empty
+select ctid,* from public.products where ctid = '(35940675,13)'; -- empty
+select ctid,* from public.products where ctid = '(35940675,14)'; -- bad
+select ctid,* from public.products where ctid = '(35940675,15)'; -- +
+select ctid,* from public.products where ctid = '(35940675,16)'; -- bad
+select ctid,* from public.products where ctid = '(35940675,17)'; -- +
+select ctid,* from public.products where ctid = '(35940675,18)'; -- +
+```
+
+1. Ищем расположение таблицы в директории /base:
+``` sql
+select pg_relation_filepath('files');
+/*
+pg_relation_filepath
+---------------------
+base/16401/16601
+*/
+```
+
+2. Конвертируем номер блока в номер файла:
+```
+(38800366 * 8192) / (1024^3) = 296.0233002  /*  base/16401/16601.296 */
+```
+3. Проверяем с помощью pg_filedump:
+```
+pg_filedump -i ./base/16401/16601.296 | grep "XMAX: 97"  /* XMIN: 0 XMAX: 97 CID|XVAC: 0 */
+```
+4. Рассчитываем номер блока в файле:
+```(0.0233002 * 1024^3) / 8192 = 3054.0038144   /* Блок 3054 */```
+
+5. Останавливаем сервер PostgreSQL
+
+6. бэкапим файлик `/base/16401/16601.296`
+
+7. “Зануляем” весь блок:
+```shell
+# dd if=/dev/zero of=/PGDATA/base/db_oid/bad_table_filenodeid bs=8k seek=XXXXX count=1 conv=notrunc
+dd if=/dev/zero of=$PG_DATA/base/16401/16601.296 bs=8192 seek=3054 count=1 conv=notrunc
+```
+
+8. Проверяем с помощью pg_filedump:
+```shell
+pg_filedump -i ./base/16401/16601.296 | grep "XMAX: 97"
+```
+
+9. Проверяем, с помощью pageinspect:
+```
+postgres=# select t_xmin, t_xmax, t_ctid from heap_page_items(get_raw_page('files',38800366)) WHERE t_xmax = 97;
+/*
+t_xmin | t_xmax | t_ctid
+---------+---------+--------
+(0 rows)
+*/
+```
+
+10. Генератор команды dd для копирования блоков. Можно искользовать для автоматизации пунктов 1-4 выше.
+Обратить внимание что seek (нужен для зануления) != skip (нужен для чтения блоков), см доку на dd
+
+```sql
+with what(rel, block_no, qty) as (
+    select 'public.products'  -- relation
+    , 35940675     -- starting block
+    , 1          -- qty of blocks to get
+), params(block_size, segment_size, path) as (
+  select pg_size_bytes(current_setting('block_size'))
+  , pg_size_bytes(current_setting('segment_size'))
+  , current_setting('data_directory')
+), calc as (
+  select block_no / (segment_size/block_size) as segment
+  , block_no % (segment_size/block_size) as offset_in_segment
+  , path||'/'||pg_relation_filepath(rel) as file
+  from params, what
+)
+
+select 'dd if='|| file || case when segment>0 then '.'||segment else '' end
+    || ' of=/tmp/'||rel::text||'_b'||block_no|| ' bs='||block_size
+    || ' skip='||offset_in_segment|| ' count='||qty
+from calc, params, what
+
+/*
+ Пример:
+ /pgsql/16/data/base/474828/5208699.274 of=/tmp/public.products_b35940675 bs=8192 skip=26947 count=1
+ */
+```
+

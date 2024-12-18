@@ -3,13 +3,13 @@ import {DocsThemeConfig} from 'nextra-theme-docs'
 
 const config: DocsThemeConfig = {
   gitTimestamp: true,
+  project: {
+    link: 'https://github.com/msotnikov/postgres-tips',
+  },
   docsRepositoryBase: "https://github.com/msotnikov/postgres-tips/tree/main",
   logo: (
     <>
-      <span className="mr-2 font-extrabold hidden md:inline">Nextra</span>
-      <span className="text-gray-600 font-normal hidden md:inline">
-        The Next.js Static Site Generator
-      </span>
+      <span className="mr-2 font-extrabold hidden md:inline">Postgres Notes</span>
     </>
   ),
   head: (
@@ -35,13 +35,6 @@ const config: DocsThemeConfig = {
       <meta name="msapplication-TileImage" content="/ms-icon-144x144.png" />
     </>
   ),
-  // search: true,
-  // prevLinks: true,
-  // nextLinks: true,
-  // footer: true,
-  // footerEditLink: "Edit this page on GitHub",
-  // footerText: <>MIT {new Date().getFullYear()} © Create Nextra App.</>,
-  // unstable_faviconGlyph: "👋",
 }
 
 export default config

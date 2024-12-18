@@ -1,7 +1,6 @@
 {
   "index": "Introduction",
-  "get-started": "Get Started",
-  "features": "Features",
-  "themes": "Themes",
-  "advanced": "Advanced"
+  "backup": "Резервное копирование",
+  "data-recovery": "Восстановление данных",
+  "monitoring": "Мониторинг"
 }
