@@ -1,7 +1,9 @@
-export default {
-  github: "https://github.com/dephraiim/create-nextra-app",
-  docsRepositoryBase: "https://github.com/dephraiim/create-nextra-app/blob/master",
-  titleSuffix: " – Nextra",
+import React from 'react'
+import {DocsThemeConfig} from 'nextra-theme-docs'
+
+const config: DocsThemeConfig = {
+  gitTimestamp: true,
+  docsRepositoryBase: "https://github.com/msotnikov/postgres-tips/tree/main",
   logo: (
     <>
       <span className="mr-2 font-extrabold hidden md:inline">Nextra</span>
@@ -33,11 +35,13 @@ export default {
       <meta name="msapplication-TileImage" content="/ms-icon-144x144.png" />
     </>
   ),
-  search: true,
-  prevLinks: true,
-  nextLinks: true,
-  footer: true,
-  footerEditLink: "Edit this page on GitHub",
-  footerText: <>MIT {new Date().getFullYear()} © Create Nextra App.</>,
-  unstable_faviconGlyph: "👋",
-};
+  // search: true,
+  // prevLinks: true,
+  // nextLinks: true,
+  // footer: true,
+  // footerEditLink: "Edit this page on GitHub",
+  // footerText: <>MIT {new Date().getFullYear()} © Create Nextra App.</>,
+  // unstable_faviconGlyph: "👋",
+}
+
+export default config

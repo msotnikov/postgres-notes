@@ -2,7 +2,9 @@
   "name": "postgres-tips",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://msotnikov.github.io/postgres-tips",
   "scripts": {
+    "predeploy": "npm run build",
     "dev": "next dev",
     "build": "next build",
     "start": "next start"
@@ -10,8 +12,12 @@
   "dependencies": {
     "next": "15.1.1",
     "nextra": "3.2.5",
-    "nextra-theme-docs": "3.2.5",
+    "nextra-theme-docs": "^3.2.5",
     "react": "19.0.0",
     "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.11.28",
+    "typescript": "5.4.2"
   }
 }
