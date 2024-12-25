@@ -13,15 +13,17 @@
 
 `CREATE EXTENSION pageinspect;` - включить расширение для чтения страниц.
 
-``
-`zero_damaged_pages` — автоматически **занулить** все страницы, в которых будут ошибки CRC (если такая проверка включена).
-
 
 ### Физически испорченные данные (блоки)
 
 При отключенных checksum испорченные блоки могут приводить к разным последствиям - ошибки при чтении/записи, и даже SEGFAULT при обращении к данным.
 В случае с включенными checksum поведение более предсказумое (см. [ignore_checksum_failure](https://www.postgresql.org/docs/current/runtime-config-developer.html#GUC-IGNORE-CHECKSUM-FAILURE) и [`checksum`](https://www.postgresql.org/docs/current/checksums.html)
 
+Если чексуммы включены то кроме ручного можно
+`ignore_invalid_pages` - проигнорировать checksum (дока)[https://www.postgresql.org/docs/current/runtime-config-developer.html#GUC-IGNORE-INVALID-PAGES] -
+`zero_damaged_pages` — автоматически **занулить** все страницы, в которых будут ошибки CRC (если такая проверка включена).
+
+Возможный ремонт - пересоздать объект (индекс или таблицу) или занулить плохие блоки в таблицах (и восстанавливать данные логически)
 
 Есть несколько способов проверять целостность данных на диске.
 
