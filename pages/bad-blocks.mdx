@@ -7,10 +7,21 @@
 - https://postgreshelp.com/postgresql-checksum/
 - [Статья](https://habr.com/ru/articles/853048/) mafet на habr
 
+###
+
+Вы для начала по имени файла выясните, что за объект испортился. Может быть, это индекс, который можно пересоздать.
+
+`CREATE EXTENSION pageinspect;` - включить расширение для чтения страниц.
+
+``
+`zero_damaged_pages` — автоматически **занулить** все страницы, в которых будут ошибки CRC (если такая проверка включена).
+
+
 ### Физически испорченные данные (блоки)
 
 При отключенных checksum испорченные блоки могут приводить к разным последствиям - ошибки при чтении/записи, и даже SEGFAULT при обращении к данным.
 В случае с включенными checksum поведение более предсказумое (см. [ignore_checksum_failure](https://www.postgresql.org/docs/current/runtime-config-developer.html#GUC-IGNORE-CHECKSUM-FAILURE) и [`checksum`](https://www.postgresql.org/docs/current/checksums.html)
+
 
 Есть несколько способов проверять целостность данных на диске.
 
@@ -41,7 +52,7 @@ Pager usage is off.
 postgres=# SELECT ctid, id FROM table;
 ```
 
-3. Метод молотилка
+3. Метод молотилка (взято у postgrespro)
 ```sql
 select molotilka(’bad_table’, 0);
 ```
@@ -55,16 +66,68 @@ n_pages integer; page integer;
 lps_in_page integer; lp_p integer;
 err_count bigint = 0;
 BEGIN
-SELECT pg_relation_size(tbl) / 8192 INTO n_pages;
+  SELECT pg_relation_size(tbl) / 8192 INTO n_pages;
+
+  FOR page IN start_page .. n_pages-1 LOOP
+    BEGIN
+      SELECT coalesce(max(lp),0) from heap_page_items(get_raw_page(tbl::text, page)) INTO lps_in_page;
+
+      FOR lp_p IN 1 .. lps_in_page LOOP
+        BEGIN
+          EXECUTE format('select row(t.*) from %s as t where ctid=''(%s,%s)''', tbl::text, page, lp_p);
+          EXCEPTION WHEN OTHERS THEN
+            err_count = err_count + 1;
+            RAISE NOTICE 'TUPLE ERROR: ctid=(%,%), SQLSTATE=% DETAIL=%', page, lp_p, SQLSTATE, SQLERRM;
+        END;
+      END LOOP;
+
+      EXCEPTION WHEN OTHERS THEN
+        err_count = err_count + 1;
+        RAISE NOTICE 'PAGE ERROR: page=%, SQLSTATE=%, DETAIL=%', page, SQLSTATE, SQLERRM;
+    END;
+  END LOOP;
+
+  RETURN err_count;
+END $$ language plpgsql;
+```
+
+
+```sql
+CREATE or REPLACE FUNCTION molotilka(tbl regclass, start_page bigint, progress bool) RETURNS bigint AS $$
+DECLARE
+ratio float = 1;
+cfs text = '';
+n_pages integer;
+page integer;
+lps_in_page integer;
+lp_in_page integer;
+err_count bigint = 0;
+pid text;
+query text;
+BEGIN
+BEGIN
+SELECT cfs_compression_ratio(tbl), 'CFS' INTO ratio, cfs;
+IF ratio = 'NaN' THEN ratio = 1.0; cfs = ''; END IF;
+EXCEPTION
+WHEN others THEN NULL;
+END;
+SELECT round(pg_relation_size(tbl) * ratio / current_setting('block_size')::int) INTO n_pages;
+RAISE NOTICE 'TABLE: % PAGES: %  %', tbl::text, n_pages, cfs;
+SELECT pg_backend_pid()::text INTO pid;
+EXECUTE 'prepare molotilka_'||pid||'(tid) as select row(t.*) from '||tbl::text||' as t where ctid=$1';
 FOR page IN start_page .. n_pages-1 LOOP
+IF progress and page % 10000 = 0 THEN
+RAISE NOTICE 'progress: PAGE %', page;
+END IF;
 BEGIN
 SELECT coalesce(max(lp),0) from heap_page_items(get_raw_page(tbl::text, page)) INTO lps_in_page;
-FOR lp_p IN 1 .. lps_in_page LOOP
+query = format('execute molotilka_%s(''(%s,%%s)'')', pid, page);
+FOR lp_in_page IN 1 .. lps_in_page LOOP
 BEGIN
-EXECUTE format('select row(t.*) from %s as t where ctid=''(%s,%s)''', tbl::text, page, lp_p);
+EXECUTE format(query, lp_in_page);
 EXCEPTION WHEN OTHERS THEN
 err_count = err_count + 1;
-RAISE NOTICE 'TUPLE ERROR: ctid=(%,%), SQLSTATE=% DETAIL=%', page, lp_p, SQLSTATE, SQLERRM;
+RAISE NOTICE 'TUPLE ERROR: ctid=(%,%), SQLSTATE=% DETAIL=%', page, lp_in_page, SQLSTATE, SQLERRM;
 END;
 END LOOP;
 EXCEPTION WHEN OTHERS THEN
@@ -72,10 +135,45 @@ err_count = err_count + 1;
 RAISE NOTICE 'PAGE ERROR: page=%, SQLSTATE=%, DETAIL=%', page, SQLSTATE, SQLERRM;
 END;
 END LOOP;
+EXECUTE 'deallocate molotilka_'||pid;
 RETURN err_count;
 END $$ language plpgsql;
 ```
 
+
+или (не тестировался)
+```
+DO
+$$DECLARE
+c CURSOR FOR SELECT * FROM products;
+r products;
+cnt bigint := 0;
+BEGIN
+OPEN c;
+
+LOOP
+cnt := cnt + 1;
+
+      /* block to start a subtransaction for each row */
+      BEGIN
+         FETCH c INTO r;
+
+         EXIT WHEN NOT FOUND;
+      EXCEPTION
+         WHEN OTHERS THEN
+            /* there was data corruption fetching the row */
+            RAISE WARNING 'skipped corrupt data at row number %', cnt;
+
+            NOVE c;
+
+            CONTINUE;
+      END;
+
+      /* row is good, salvage it */
+      INSERT INTO products_dump VALUES (r.*);
+END LOOP;
+END;$$;
+```
 
 ### Восстановление таблицы удалением испрорченных данных
 
