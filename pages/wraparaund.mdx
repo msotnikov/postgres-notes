@@ -1,27 +1,36 @@
 
-`VACUUM FROZEN`
+# Wraparound
+
+Выполняется автоматически путем запуска VACUUM ANALYZE `autovacuum: VACUUM ANALYZE public.products (to prevent wraparound)`
+Или вручную `vacuum (analyze,  freeze) public.table;`
 
 
+###autovacuum to prevent wraparound
+Отменить autovacuum to prevent wraparound нельзя. Он создает транзакцию (со всеми вытекающими).
+Если очень нужно, то можно убивать в psql:
+```
+# SELECT query, pg_terminate_backend(pid) FROM pg_stat_activity as psa
+WHERE backend_type like 'autovacuum%' and query like '%public.products%';
+
+# \watch 2
+```
+
+
+###Проверить возраст для баз данных:
 ```sql
 SELECT oid, datname, age(datfrozenxid), mxid_age(datminmxid)
 FROM pg_database ORDER BY age(datfrozenxid) DESC
 ```
 
-Проверка max transaction id
+###Проверка max transaction id для таблиц в схеме:
 ```sql
 SELECT
-    c.relnamespace::regnamespace as schema_name, c.relname as table_name,
-  greatest(age(c.relfrozenxid),age(t.relfrozenxid)) as age,
-  2^31-1000000-greatest(age(c.relfrozenxid),age(t.relfrozenxid)) as remaining
-FROM pg_class c LEFT JOIN pg_class t ON c.reltoastrelid = t.oid
-WHERE c.relkind IN ('r', 'm') -- and c.relnamespace=2200
-ORDER BY 4;
-```
-
-```sql
-SELECT c.oid::regclass as table_name,
-greatest(age(c.relfrozenxid),age(t.relfrozenxid)) as age,
-mxid_age(c.relminmxid), *
+    c.relnamespace::regnamespace as schema_name,
+    c.oid::regclass as table_name, -- c.relname as table_name,
+    greatest(age(c.relfrozenxid), age(t.relfrozenxid)) as age,
+    2^31-1000000-greatest(age(c.relfrozenxid), age(t.relfrozenxid)) as remaining,
+    mxid_age(c.relminmxid)
+     --, *
 FROM pg_class c
 LEFT JOIN pg_class t ON c.reltoastrelid = t.oid
 WHERE c.relkind IN 	('r', 'm') and c.relnamespace=2200 order by age desc;

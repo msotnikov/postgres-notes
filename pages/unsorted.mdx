@@ -1,0 +1,168 @@
+# damaged_pages
+
+select t_xmin, t_xmax, t_ctid, * from heap_page_items(get_raw_page('products',42694153)) -- WHERE t_xmax = 97;
+
+select ctid, * from products where
+ctid in (
+'(42694153,2)',
+'(42694153,5)',
+'(42694153,12)',
+'(42694153,2)'
+)
+
+
+
+
+SELECT pg_class.relfilenode, pg_namespace.nspname as schema_name, pg_class.relname, pg_class.relkind
+from pg_class
+JOIN pg_namespace on pg_class.relnamespace = pg_namespace.oid
+where relfilenode = 5208699
+ORDER BY pg_class.relfilenode ASC;
+
+SET zero_damaged_pages=on;
+select t_xmin, t_xmax, t_ctid, * from heap_page_items(get_raw_page('products',42694153)); -- WHERE t_xmax = 97;
+SET zero_damaged_pages=off;
+
+
+SET zero_damaged_pages on;
+
+
+select ctid, * from products where
+ctid in (
+'(5208699,1)',
+'(5208699,2)',
+'(5208699,3)',
+'(5208699,4)',
+'(5208699,5)',
+'(5208699,6)',
+'(5208699,7)',
+'(5208699,8)',
+'(5208699,9)',
+'(5208699,10)',
+'(5208699,11)'
+)
+
+
+
+
+select jsonb_agg(data) as products from public.products where "storeUuid"='20230411-1D5F-40BE-807D-3D48738AFA5E' and uuid=any(ARRAY['f03e91e4-5a7e-11ed-ab78-cc52af19c7c7','24d43cb2-acd6-11eb-94a6-cc52af19c7c7'])
+
+
+select t_xmin, t_xmax, t_ctid, * from heap_page_items(get_raw_page('products',42694153)) -- WHERE t_xmax = 97;
+
+
+select ctid, * from products where
+ctid in (
+'(42694153,2)',
+'(42694153,5)',
+'(42694153,12)',
+'(42694153,2)'
+)
+
+
+
+SELECT pg_class.relfilenode, pg_namespace.nspname as schema_name, pg_class.relname, pg_class.relkind
+from pg_class
+JOIN pg_namespace on pg_class.relnamespace = pg_namespace.oid
+
+ORDER BY pg_class.relfilenode ASC;
+
+
+SHOW data_directory;
+
+select * from subscribes s where "subscriptionId" = '2053f958-4473-4463-a77f-33872fadfb10' order by timestamp, "sequenceNumber"
+/*
+
+explain analyze
+
+with t1 as (
+-- explain analyze
+select
+"userId",
+"storeUuid",
+jsonb_array_to_text_array(product_groups->"storeUuid"->'groups') as groups,
+(product_groups->"storeUuid"->'showZeroes')::boolean as "showZeroes",
+(
+select
+array_agg("productId")
+from
+get_subscriptions_pure_v2("userId")) apps
+from
+(
+select
+"userId",
+jsonb_object_keys(product_groups) as "storeUuid",
+product_groups
+from
+storefront_users) t
+),
+t2 as (
+select
+"productId",
+app_name
+from
+applications
+where
+is_tu = true
+or app_name = 'app_shf'
+)
+
+
+select
+"userId",
+"storeUuid",
+groups,
+"showZeroes",
+unnest(apps) as app
+from
+(
+select
+"userId",
+"storeUuid",
+groups,
+"showZeroes",
+array_agg(case
+when app_name is null then 'app_shf'
+else app_name
+end) as apps
+from  t1
+left join t2 on
+"productId" = any(apps)
+group by
+"userId",
+"storeUuid",
+groups,
+"showZeroes"
+
+             ) t
+
+*/
+
+
+explain analyze
+
+
+
+with t1 as (
+select
+"userId",
+jsonb_object_keys(product_groups) as "storeUuid",
+product_groups,
+get_subscriptions_pure_v2("userId")) apps
+from
+storefront_users
+
+)
+
+select
+t1."userId",
+t1."storeUuid",
+uuid,
+images
+from
+
+join products t2 on
+t1."userId" = t2."userId"
+and t1."storeUuid" = t2."storeUuid"
+and images is not null
+and jsonb_array_length(images->'files')>0
