@@ -5,7 +5,7 @@
 Или вручную `vacuum (analyze,  freeze) public.table;`
 
 
-###autovacuum to prevent wraparound
+### autovacuum to prevent wraparound
 Отменить autovacuum to prevent wraparound нельзя. Он создает транзакцию (со всеми вытекающими).
 Если очень нужно, то можно убивать в psql:
 ```
@@ -16,13 +16,13 @@ WHERE backend_type like 'autovacuum%' and query like '%public.products%';
 ```
 
 
-###Проверить возраст для баз данных:
+### Проверить возраст для баз данных:
 ```sql
 SELECT oid, datname, age(datfrozenxid), mxid_age(datminmxid)
 FROM pg_database ORDER BY age(datfrozenxid) DESC
 ```
 
-###Проверка max transaction id для таблиц в схеме:
+### Проверка max transaction id для таблиц в схеме:
 ```sql
 SELECT
     c.relnamespace::regnamespace as schema_name,
