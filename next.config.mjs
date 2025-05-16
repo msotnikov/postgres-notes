@@ -8,7 +8,7 @@ const nextConfig = {
   images: {
     unoptimized: true // mandatory, otherwise won't export
   },
-  basePath: '/postgres-tips',
+  basePath: '/postgres-notes',
   // Optional: Change the output directory `out` -> `dist`
   // distDir: "build"
 }

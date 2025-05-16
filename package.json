@@ -1,8 +1,8 @@
 {
-  "name": "postgres-tips",
+  "name": "postgres-notes",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://msotnikov.github.io/postgres-tips",
+  "homepage": "https://msotnikov.github.io/postgres-notes",
   "scripts": {
     "predeploy": "npm run build",
     "dev": "next dev",

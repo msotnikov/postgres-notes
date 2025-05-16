@@ -1,6 +1,6 @@
 # Postgres Tips
 These are notes taken while working with a Postgres Database.
-Published here https://msotnikov.github.io/postgres-tips/
+Published here https://msotnikov.github.io/postgres-notes/
 
 ## Development
 

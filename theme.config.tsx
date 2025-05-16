@@ -4,9 +4,9 @@ import {DocsThemeConfig} from 'nextra-theme-docs'
 const config: DocsThemeConfig = {
   gitTimestamp: true,
   project: {
-    link: 'https://github.com/msotnikov/postgres-tips',
+    link: 'https://github.com/msotnikov/postgres-notes',
   },
-  docsRepositoryBase: "https://github.com/msotnikov/postgres-tips/tree/main",
+  docsRepositoryBase: "https://github.com/msotnikov/postgres-notes/tree/main",
   logo: (
     <>
       <span className="mr-2 font-extrabold hidden md:inline">Postgres Notes</span>
